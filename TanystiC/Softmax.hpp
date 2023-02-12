@@ -20,7 +20,7 @@ public:
 
 	Tensor backwards(const Tensor& out_grad, f64 lr) override
 	{
-		return { 0 };
+		return ops::Multiply(out_grad ,grad::gradient([this](const Tensor& x){return call(x , false);}));
 	}
 
 	void build(const Tensor& input) override {};
