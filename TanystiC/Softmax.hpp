@@ -1,6 +1,7 @@
 #pragma once
 #include "Layer.hpp"
 #include "nn_ops.hpp"
+#include "backwards.hpp"
 #include "TensorOps.hpp"
 
 template<typename T>
@@ -20,7 +21,7 @@ public:
 
 	Tensor backwards(const Tensor& out_grad, f64 lr) override
 	{
-		return ops::Multiply(out_grad ,grad::gradient([this](const Tensor& x){return call(x , false);}));
+		return ops::Multiply(out_grad ,grad::softmaxdx(stored_activation));
 	}
 
 	void build(const Tensor& input) override {};
