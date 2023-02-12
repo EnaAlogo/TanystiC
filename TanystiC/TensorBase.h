@@ -11,9 +11,6 @@
 
 namespace beta
 {
-	template<typename T>
-	class expr;
-
 	
 	template< typename Type , u32 N >
 	class Tensor
@@ -80,10 +77,6 @@ namespace beta
 		constexpr inline const SharedPtr<value_type[]>& data() const { return data_; };
 		constexpr inline const i64 offset() const { return begin_; };
 
-		//constexpr inline SharedPtr<value_type[]>& set_data() { return data_; };
-		//constexpr inline  i64& set_offset() { return begin_; };
-		//constexpr inline TensorShape& set_shape() { return shape_; };
-		//constexpr inline Strides& set_strides() { return strides_; };
 
 		template<typename ...Indices>
 		constexpr reference operator () (Indices&&...indices)
@@ -459,41 +452,6 @@ namespace beta
 	};
 
 
-
-
-	template<typename T>
-	class expr
-	{
-
-	public:
-		explicit constexpr expr(const std::function < Tensor<T>() >& f)
-			:expression(f) , check(tensor) {};
-		explicit constexpr expr(const std::function < T() >& f)
-			:expression(f) , check(scalar) {};
-
-		constexpr operator Tensor<T>()
-		{
-			if (check != tensor)
-				throw std::bad_cast();
-			return expression();
-		}
-		constexpr operator T ()
-		{
-			if (check != scalar)
-				throw std::bad_cast();
-			return expression();
-		}
-
-	private:
-		static enum ret_type
-		{
-			tensor,
-			scalar
-		};
-		std::variant < std::function < Tensor<T>() >, std::function < T() > > expression;
-		ret_type check;
-		
-	};
 
 	
 };
