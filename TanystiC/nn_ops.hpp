@@ -155,52 +155,6 @@ namespace nn
 
 
 
-#if 0
-	template<typename T>
-	Tensor<T> gptconv2d(
-		const Tensor<T>& input,
-		const Tensor<T>& w,
-		const smallvec<size_t>& strides,
-		const smallvec<size_t>& padding
-	)
-	{
-		size_t hout = (input.shape()[1] + 2 * padding[0] - w.shape()[0]) / strides[1] + 1;
-		size_t wout = (input.shape()[2] + 2 * padding[1] - w.shape()[1]) / strides[2] + 1;
-
-		Tensor<T> a = input;
-		a.set_shape() = smallvec<size_t>{
-			a.shape()[0], hout, wout, w.shape()[0], w.shape()[1], a.shape()[3]
-		};
-		a.set_strides() = vec::concat(
-			vec::slice(a.strides(), 0, 3),
-			vec::slice(a.strides(), 1, a.strides().size())
-		);
-
-		// Add code for padding here
-
-		Tensor<T> padded_input({ input.shape()[0], input.shape()[1] + 2 * padding[0], input.shape()[2] + 2 * padding[1], input.shape()[3] });
-		for (int i = 0; i < padded_input.shape()[0]; i++)
-		{
-			for (int j = 0; j < padded_input.shape()[1]; j++)
-			{
-				for (int k = 0; k < padded_input.shape()[2]; k++)
-				{
-					if (j < padding[0] || j >= input.shape()[1] + padding[0] || k < padding[1] || k >= input.shape()[2] + padding[1])
-					{
-						padded_input(i, j, k, 0) = 0;
-					}
-					else
-					{
-						padded_input(i, j, k, 0) = input(i, j - padding[0], k - padding[1], 0);
-					}
-				}
-			}
-		}
-
-		return math::tensordot(a, w, 3);
-	}
-#endif
-
 	
 };
 
