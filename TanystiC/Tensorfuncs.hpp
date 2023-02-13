@@ -108,7 +108,8 @@ namespace reduce {
 		}
 	};
 	template<typename T, u32 N>
-	beta::Tensor<T, N> sum(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes)
+	beta::Tensor<T, N> sum(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes,
+		const bool keepdims = 0 )
 	{
 
 		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)0);
@@ -117,6 +118,12 @@ namespace reduce {
 		{
 			size_t i = vec::compute_flat_index(strides, tmp.shape(), index);
 			out[i] += item;
+		}
+		if (keepdims) {
+			smallvec<size_t, N> keepdims = a.shape();
+			for (auto i : axes) 
+				keepdims[i] = 1;
+			out = out.reshape(keepdims);
 		}
 		return out;
 	}
@@ -129,13 +136,20 @@ namespace reduce {
 		return s;
 	}
 	template<typename T, u32 N>
-	beta::Tensor<T, N> multiply(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes)
+	beta::Tensor<T, N> multiply(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes,
+		const bool keepdims = 0)
 	{
 		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)1);
 		for (auto [index, item] : tEnumerate(tmp))
 		{
 			size_t i = vec::compute_flat_index(strides, tmp.shape(), index);
 			out[i] *= item;
+		}
+		if (keepdims) {
+			smallvec<size_t, N> keepdims = a.shape();
+			for (auto i : axes)
+				keepdims[i] = 1;
+			out = out.reshape(keepdims);
 		}
 		return out;
 	}
@@ -148,10 +162,11 @@ namespace reduce {
 		return s;
 	}
 	template<typename T, u32 N>
-	beta::Tensor<T, N> mean(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes)
+	beta::Tensor<T, N> mean(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes,
+		const bool keepdims =0 )
 	{
 		// Compute the sum of the elements along the specified axis
-		auto total = sum(a, axes);
+		auto total = sum(a, axes , keepdims);
 
 		//TODO mean sht
 		// Compute the size of the reduction dimension
@@ -175,24 +190,22 @@ namespace reduce {
 	}
 
 	template<typename T, u32 N>
-	Tensor<T, N> variance(const Tensor<T, N>& a, std::initializer_list<i32> axes)
+	Tensor<T, N> variance(const Tensor<T, N>& a, std::initializer_list<i32> axes,
+		const bool keepdims=0)
 	{
 		T prod = 1;
-		smallvec<size_t, N> keepdims = a.shape();
 		for (auto i : axes) {
 			prod *= a.shape()[i];
-			keepdims[i] = 1;
 		};
 
-		Tensor<T,N> mean_ = mean(a , axes);
+		Tensor<T,N> mean_ = mean(a , axes , 1);
 
-		mean_ = mean_.reshape(keepdims);
 
 		Tensor<T, N> x = ops::Subtract(a, mean_ );
 
 		x.apply([](T item) {return item * item; });
 
-		Tensor<T, N> ret = sum(x, axes);
+		Tensor<T, N> ret = sum(x, axes , keepdims);
 
 		ret /= prod;
 
@@ -218,15 +231,17 @@ namespace reduce {
 		return std::sqrt(var);
 	};
 	template<typename T, u32 N>
-	Tensor<T, N> stddev(const Tensor<T, N>& a, std::initializer_list<i32> axes)
+	Tensor<T, N> stddev(const Tensor<T, N>& a, std::initializer_list<i32> axes,
+		const bool keepdims = 0)
 	{
-		Tensor<T, N> var = variance(a, axes);
+		Tensor<T, N> var = variance(a, axes , keepdims);
 		var.apply([](T item) {return std::sqrt(item); });
 		return var;
 	};
 
 	template<typename T, u32 N>
-	Tensor<T, N> norm(const Tensor<T, N>& a, std::initializer_list<i32> axes)
+	Tensor<T, N> norm(const Tensor<T, N>& a, std::initializer_list<i32> axes,
+		const bool keepdims =0)
 	{
 		
 		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)0);
@@ -237,6 +252,12 @@ namespace reduce {
 			out[i] += item*item;
 		}
 		out.apply([](T item) {return std::sqrt(item); });
+		if (keepdims) {
+			smallvec<size_t, N> keepdims = a.shape();
+			for (auto i : axes)
+				keepdims[i] = 1;
+			out = out.reshape(keepdims);
+		}
 		return out;
 	}
 
