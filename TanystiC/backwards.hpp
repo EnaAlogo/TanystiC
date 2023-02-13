@@ -5,63 +5,6 @@
 #include "TensorOps.hpp"
 #include "Tensorfuncs.hpp"
 
-namespace nn
-{
-	namespace training
-	{
-
-		template<typename T ,u32 M, u32 N>
-		auto step(
-			f32 lr ,
-			const beta::Tensor<T,M>& input ,
-			Matrix<f32>& weight,
-			Vector<f32>& bias, 
-			Tensor<T, N>& grad_output)
-		{
-			auto grad_input = math::tensordot(grad_output , weight.T(),std::array{-1,0});
-
-			auto grad_weights = math::tensordot(input.T(), weight, std::array{ -1,0 });
-
-			auto grad_biases = reduce::mean(grad_output) * input.shape()[0];
-
-			grad_weights *= lr;
-			grad_biases *= lr;
-
-			ops::Subtract(weight, grad_weights, weight);
-			bias -= grad_biases;
-
-			return grad_input;
-
-		}
-		template<typename T, u32 M>
-		auto step(
-			f32 lr,
-			const beta::Tensor<T, M>& input,
-			Matrix<f32>& weight,
-			Vector<f32>& bias,
-			T grad_output)
-		{
-			auto grad_input = weight.T() * grad_output;
-			
-			auto grad_weights = weight * grad_output;
-
-			auto grad_biases = grad_output * input.shape()[0];
-
-			grad_weights *= lr;
-			grad_biases *= lr;
-
-			ops::Subtract(weight, grad_weights, weight);
-			bias -= grad_biases;
-
-			return grad_input;
-		}
-
-
-	};
-	
-	
-	
-};
 
 namespace grad
 {
