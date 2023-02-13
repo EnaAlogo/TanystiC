@@ -81,8 +81,9 @@ public:
 		nn::rm(kernel, dw);
 
 		if (use_bias){
+			grad = reduce::sum(grad, { 0 });
 			grad *= lr;
-			nn::rm(bias, grad);
+			nn::rm(bias, grad );
 		}
 
 		return dx;
