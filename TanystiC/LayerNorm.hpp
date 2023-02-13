@@ -22,6 +22,7 @@ LayerNorm(
 		gamma_initializer(initializers::get<T>(gamma_initializer))
 	{};
 
+	
 	Tensor call(const Tensor& inputs, const bool training) override
 	{
 		if (!built)
@@ -29,19 +30,32 @@ LayerNorm(
 
 		Tensor mean = reduce::mean(inputs, { -1 } , 1);
 		Tensor var = reduce::variance(inputs, { -1 } , 1);
+		Tensor sigma = var.transform([this](T x) {return std::sqrt(x + eps); });
+		Tensor xcenter = ops::Subtract(inputs, mean);
+		Tensor xnorm = ops::Divde(xcenter, sigma);
 		if (training) {
-			std = reduce::stddev(inputs, { -1 },1);
-			x_norm = ops::Divde(ops::Subtract(inputs, mean), std);
+			std = sigma;
+			x_centered = xcenter;
+			x_norm = xnorm;
 		}
-
+		
 		smallvec<size_t> bcastshape(inputs.rank());
 		for (size_t& i : bcastshape) i = 1;
 		bcastshape[-1] = inputs.shape()[-1];
 
-		Tensor scale = ops::broadcast_to(gamma, bcastshape);
+		Tensor scale_ = ops::broadcast_to(gamma, bcastshape);
 		Tensor offset = ops::broadcast_to(beta, bcastshape);
 
-		return nn::batch_norm(inputs, mean, var, scale, offset, eps);
+		Tensor out = xnorm.deepcopy();
+
+		ops::Divde(xnorm, sigma, out);
+
+		if (scale)
+			ops::Multiply(scale_, out, out);
+
+		if (center)
+			ops::Add(out, offset, out);
+		return out;
 
 	}
 
@@ -63,12 +77,27 @@ LayerNorm(
 
 	Tensor backwards(const Tensor& out_grad, f64 lr)
 	{
+		Tensor dx_norm = scale ? ops::Multiply(out_grad, gamma) : out_grad;
+		f64 n = gamma.size();
+			/*[&out_grad]() {
+			f64 prod=1;
+			for (i32 i = 1; i < out_grad.rank() ; ++i)
+				prod *= out_grad.shape()[i];
+			return prod;
+		}(); */
+		f64 invn = 1. / n;
+		std.apply([&invn](T x) {return invn / x; });
+		Tensor dx = ops::Multiply(
+			ops::Subtract(
+				ops::Subtract(dx_norm * n, reduce::sum(dx_norm, { -1 } , 1)),
+				ops::Multiply(x_norm, reduce::sum(ops::Multiply(dx_norm, x_norm), { -1 } ,1))
+			),
+			std );
 
-		auto [dx, db, dg] = grad::batch_norm_backwards(out_grad, x_norm, std, gamma);
-
-		nn::rm(gamma *= lr, dg);
-		nn::rm(beta *= lr, db);
-
+		if (scale)
+			nn::rm(gamma *= lr, reduce::sum(ops::Multiply(out_grad, x_norm), {0} ));
+		if (center)
+			nn::rm(beta *= lr, reduce::sum(out_grad ,{0} ));
 		return dx;
 
 	}
@@ -76,7 +105,8 @@ LayerNorm(
 private:
 	Tensor
 		std,
-		x_norm;
+		x_norm,
+		x_centered;
 	Vector
 		beta,
 		gamma;

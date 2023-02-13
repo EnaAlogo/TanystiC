@@ -28,7 +28,7 @@ public:
 		moving_var_initializer(initializers::get<T>(moving_var_initializer))
 	{};
 
-	Tensor call(const Tensor& inputs, const bool training) override
+Tensor call(const Tensor& inputs, const bool training) override
 	{
 		if (!built)
 			build(inputs);
@@ -73,10 +73,12 @@ public:
 			Tensor x_norm = ops::Subtract(inputs, moving_mean);
 
 			Tensor out = x_norm.deepcopy();
-			if (scale)
-				ops::Multiply(gamma, x_norm, out);
+			
 
 			ops::Divde(x_norm, epsq, out);
+
+			if (scale)
+				ops::Multiply(gamma, x_norm, out);
 
 			if (center)
 				nn::bias_add(out, beta);
@@ -109,21 +111,25 @@ public:
 	{
 
 		Tensor dx_norm = scale ? ops::Multiply(out_grad, gamma) : out_grad;
-		f64 n = std.shape().prod();
+		f64 n = [&out_grad]() {
+			f64 prod=1;
+			for (i32 i = 0; i < out_grad.rank() - 1; ++i)
+				prod *= out_grad.shape()[i];
+			return prod;
+		}();
 		f64 invn = 1. / n;
-
+		std.apply([&invn](T x) {return invn / x; });
 		Tensor dx = ops::Multiply(
 			ops::Subtract(
 				ops::Subtract(dx_norm * n, reduce::sum(dx_norm, { 0 })),
 				ops::Multiply(x_norm, reduce::sum(ops::Multiply(dx_norm, x_norm), { 0 }))
 			) , 
-			std.transform([invn](T x) {
-				return invn / x; }));
+			std );
 
 		if (scale)
 			nn::rm(gamma *= lr, reduce::sum(ops::Multiply(out_grad, x_norm), { 0 }));
 		if (center)
-			nn::rm(beta *=  lr, reduce::sum(out_grad, { 0 }) );
+			nn::rm(beta *=  lr, reduce::sum(out_grad , {0}));
 		return dx;
 	}
 
