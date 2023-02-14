@@ -77,7 +77,6 @@ namespace beta
 		constexpr inline const SharedPtr<value_type[]>& data() const { return data_; };
 		constexpr inline const i64 offset() const { return begin_; };
 
-
 		template<typename ...Indices>
 		constexpr reference operator () (Indices&&...indices)
 		{
@@ -121,23 +120,14 @@ namespace beta
 		{
 			return ops::transpose(*this);
 		}
+
 		constexpr Tensor deepcopy() const
 		{
 			Tensor copy(shape_);
-#if MT
-			enumerate it(*this);
-			size_t i = 0;
-			std::for_each(std::execution::par, begin(), end(),
-				[&copy, &i](auto tup)
-				{
-					//auto [i, item] = tup;
-					copy[i++] = tup;
-				}
-			);
-#else
+
 			for (const auto& [i, el] : enumerate(*this))
 				copy[i] = el;
-#endif
+
 			return copy;
 		}
 
@@ -159,20 +149,10 @@ namespace beta
 		constexpr void deepcopy(Tensor<Type , M>& copy) const
 		{
 			assert(copy.isContiguous());
-#if MT
-			enumerate it(*this);
-			size_t i = 0;
-			std::for_each(std::execution::par,begin(), end(),
-				[&copy , &i](auto tup)
-				{
-					//auto [i, item] = tup;
-			        copy[i++] = tup;
-				}
-			);
-#else
+
 			for (const auto& [i, el] : enumerate(*this))
 				copy[i] = el;
-#endif
+
 		}
 
 		constexpr inline bool isContiguous() const
@@ -186,7 +166,8 @@ namespace beta
 		template<u32 M>
 		constexpr Tensor<Type , M > reshape(const smallvec<size_t , M>&new_shape) const
 		{
-			assert(new_shape.prod() == shape_.prod() && "sizes dont match cant reshape");
+			if (new_shape.prod() != shape_.prod())
+				std::cerr << "sizes dont match cant reshape", throw std::invalid_argument("");
 
 			if (!isContiguous())
 			{
@@ -200,7 +181,9 @@ namespace beta
 		constexpr self reshape(std::initializer_list<size_t> shape) const
 		{
 			smallvec<size_t> new_shape(shape);
-			assert(new_shape.prod() == shape_.prod() && "sizes dont match cant reshape");
+
+			if (new_shape.prod() != shape_.prod())
+				std::cerr << "sizes dont match cant reshape", throw std::invalid_argument("");
 			
 			if (!isContiguous())
 			{
@@ -210,21 +193,12 @@ namespace beta
 			}
 			return Tensor(new_shape, vec::compute_strides(new_shape), begin_, data_);
 		};
-
-		template<typename func>
-		self transform(const func& f) const
-		{
-			self out(shape_);
-			for (auto [i, item] : enumerate(*this))
-				out[i] = f(item);
-			return out;
-		};
-
-		template< typename...Args ,typename= std::enable_if_t< (sizeof...(Args) > 1) >>
-		constexpr self reshape(Args&&...args) const
+		template< typename...Args, typename = std::enable_if_t< (sizeof...(Args) > 1) >>
+			constexpr self reshape(Args&&...args) const
 		{
 			smallvec<size_t> new_shape(std::forward<Args>(args)...);
-			assert(new_shape.prod() == shape_.prod() && "sizes dont match cant reshape");
+			if (new_shape.prod() != shape_.prod())
+				std::cerr << "sizes dont match cant reshape", throw std::invalid_argument("");
 
 			if (!isContiguous())
 			{
@@ -234,6 +208,20 @@ namespace beta
 			}
 			return Tensor<Type>(new_shape, vec::compute_strides(new_shape), begin_, data_);
 		};
+		
+		template<typename func>
+		self transform(const func& f) const
+		{
+			self out(shape_);
+			for (auto [i, item] : enumerate(*this))
+				out[i] = f(item);
+			return out;
+		};
+
+		void print() const {
+			smallvec<size_t, N> indices;
+			tensor_print(indices, 0);
+		}
 
 		constexpr iterator begin()
 		{
@@ -349,17 +337,10 @@ namespace beta
 		template<typename functor>
 		constexpr self& apply(const functor& filter)
 		{
-#if MT
-			std::for_each(std::execution::par, begin(), end(),
-				[&filter](auto& item)
-				{
-					item = filter(item);
-				}
-			);
-#else
+
 			for (auto& item : *this)
 				item = filter(item);
-#endif
+
 			return *this;
 		}
 		self& initialize(initializer<value_type>&& kernel_initializer)
@@ -375,28 +356,7 @@ namespace beta
 			return *this;
 		}
 
-#if 0
-		template<typename t ,u32 n , u32 m>
-		friend constexpr auto operator +(const Tensor<t, n>& a, const Tensor<t, m>& b)
-		{
-			return ops::Add(a, b);
-		}
-		template<typename t, u32 n, u32 m>
-		friend constexpr auto operator -(const Tensor<t, n>& a, const Tensor<t, m>& b)
-		{
-			return ops::Subtract(a, b);
-		}
-		template<typename t, u32 n, u32 m>
-		friend constexpr auto operator *(const Tensor<t, n>& a, const Tensor<t, m>& b)
-		{
-			return ops::Multiply(a, b);
-		}
-		template<typename t, u32 n, u32 m>
-		friend constexpr auto operator /(const Tensor<t, n>& a, const Tensor<t, m>& b)
-		{
-			return ops::Divde(a, b);
-		}
-#endif
+
 	private:
 		TensorShape shape_;
 		Strides strides_;
@@ -414,40 +374,43 @@ namespace beta
 			value_type scalar) const
 		{
 			Tensor res(shape_);
-#if MT
-			enumerate it(*this);
-			size_t i = 0;
-			std::for_each(std::execution::par, begin(), end(),
-				[&res ,&i , scalar](auto tup)
-				{
-					//auto [i, item] = tup;
-			        res[i++] = op(tup, scalar);
-				}
-			);
-#else
+
 			for (auto[ i , item ] : enumerate(*this) )
 				res[i] = op(item, scalar);
-#endif
+
 			return res;
 		}
 		constexpr Tensor Unary_operation(const unary<value_type>& op) const
 		{
 			Tensor res(shape_);
-#if MT
-			enumerate it(*this);
-			size_t i = 0;
-			std::for_each(std::execution::par, begin(), end(),
-				[&res, &i](auto tup)
-				{
-					//auto [i, item] = tup;
-					res[i++] = op(tup);
-				}
-			);
-#else
+
 			for (auto [i, item] : enumerate(*this))
 				res[i] = op(item);
-#endif
+
 			return res;
+		}
+
+		void tensor_print(smallvec<size_t,N>& indices , i32 level) const {
+			if (level == rank() - 1)
+			{
+				std::cout << "[ ";
+				for (size_t i = 0; i < shape_[-1]; ++i) {
+					indices[-1] = i;
+					size_t offset = calc_offset(indices);
+					std::cout <<  (*this)[offset] << " ";
+				}
+				size_t offset = calc_offset(indices);
+				indices[-1] = 0;
+				std::cout << "]\n";
+				return;
+			};
+
+			for (size_t i = 0; i < shape_[level]; ++i) {
+				indices[level] = i;
+				tensor_print( indices, level + 1);
+			}
+
+			indices[level] = 0;
 		}
 	};
 
