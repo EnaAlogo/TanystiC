@@ -59,7 +59,9 @@ public:
 		//Tensor grad = out_grad.reshape(out_grad.shape().prod() / units, units);
 		//stored_inputs = stored_inputs.reshape(units,stored_inputs.shape().prod()/units );
 
-		Tensor dw = math::dot(stored_inputs.T(), out_grad);
+		smallvec<i32> axes = vec::tovec<i32>(range(out_grad.rank() - 1));
+
+		Tensor dw = math::tensordot(stored_inputs, out_grad, std::pair{ axes,axes });
 		dw *= lr;
 		nn::rm(weights, dw);
 

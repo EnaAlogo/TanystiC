@@ -71,7 +71,9 @@ public:
 		}
 		Tensor dx = math::dot(grad, weights.T());
 
-		Tensor dw = math::dot(stored_inputs.T(), grad);
+		smallvec<i32> axes = vec::tovec<i32>(range(out_grad.rank() - 1));
+
+		Tensor dw = math::tensordot(stored_inputs, out_grad, std::pair{ axes,axes });
 
 		dw *= lr;
 		nn::rm(weights, dw);
