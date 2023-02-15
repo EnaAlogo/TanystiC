@@ -219,7 +219,7 @@ namespace beta
 		};
 
 		void print() const {
-			smallvec<size_t, N> indices;
+			smallvec<size_t, N> indices(rank());
 			tensor_print(indices, 0);
 		}
 
@@ -397,7 +397,7 @@ namespace beta
 				for (size_t i = 0; i < shape_[-1]; ++i) {
 					indices[-1] = i;
 					size_t offset = calc_offset(indices);
-					std::cout <<  (*this)[offset] << " ";
+					std::cout <<  operator[](offset) << " ";
 				}
 				size_t offset = calc_offset(indices);
 				indices[-1] = 0;
