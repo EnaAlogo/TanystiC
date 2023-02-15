@@ -301,6 +301,7 @@ public:
 	Tensor backwards(const Tensor& out_grad, f64 lr) override
 	{
 		Tensor df = grad::gradient(func, stored_input);
+		ops::Multiply(out_grad, df, df);
 		return df;
 	}
 	void build(const Tensor& input) override
