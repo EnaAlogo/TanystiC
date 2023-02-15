@@ -31,6 +31,93 @@ private:
 	Tensor stored_activation;
 };
 
+template<typename T>
+class ELU : public Layer<T>
+{
+	using Tensor = Layer<T>::Tensor;
+public:
+	using value_type = T;
+
+	ELU(const T alpha = 1)
+		:alpha(alpha) {};
+
+	Tensor call(const Tensor& input, const bool training) override
+	{
+		
+		Tensor y = input.transform([this](T z)
+			{
+				return z < 0 ? alpha * (std::exp(z) - 1) : z;
+			});
+		if (training)
+			stored_activation = y;
+		return y;
+	}
+
+	Tensor backwards(const Tensor& out_grad, f64 lr) override
+	{
+		//delta elu return 1 if z >0 else alpha * exp(z)
+		// a( ( a(exp(z)-1) )/ a +1 ) = a*exp(z) maybe
+		stored_activation.apply(
+			[this](T z)
+			{
+				return z > 0 ? 1 : (z / alpha + 1) * alpha;
+			}
+		);
+		ops::Multiply(stored_activation, out_grad, stored_activation);
+		return stored_activation;
+
+	}
+	void build(const Tensor& input) override
+	{
+
+	}
+private:
+	Tensor stored_activation;
+	const T alpha;
+};
+
+template<typename T>
+class LeakyReLU : public Layer<T>
+{
+	using Tensor = Layer<T>::Tensor;
+public:
+	using value_type = T;
+
+	LeakyReLU(const T alpha = .3)
+		:alpha(alpha) {};
+
+	Tensor call(const Tensor& input, const bool training) override
+	{
+
+		Tensor y = input.transform([this](T z)
+			{
+				return  z >= 0 ? z : alpha * z;
+			});
+		if (training)
+			stored_activation = y;
+		return y;
+	}
+
+	Tensor backwards(const Tensor& out_grad, f64 lr) override
+	{
+		stored_activation.apply(
+			[this](T z)
+			{
+				return z > 0 ? 1 : alpha;
+			}
+		);
+		ops::Multiply(stored_activation, out_grad, stored_activation);
+		return stored_activation;
+
+	}
+	void build(const Tensor& input) override
+	{
+
+	}
+private:
+	Tensor stored_activation;
+	const T alpha;
+};
 
 template<typename T>
 class GELU : public Layer<T>
