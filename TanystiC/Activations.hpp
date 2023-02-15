@@ -26,7 +26,7 @@ public:
 		ops::Multiply(stored_activation, out_grad, stored_activation);
 		return stored_activation;
 	}
-	void build(const Tensor& input) override {};
+
 private:
 	Tensor stored_activation;
 };
@@ -57,20 +57,18 @@ public:
 	{
 		//delta elu return 1 if z >0 else alpha * exp(z)
 		// a( ( a(exp(z)-1) )/ a +1 ) = a*exp(z) maybe
+		T a1 = 1 / alpha;
 		stored_activation.apply(
-			[this](T z)
+			[this , a1](T z)
 			{
-				return z > 0 ? 1 : (z / alpha + 1) * alpha;
+				return z > 0 ? 1 : (z * a1 + 1) * alpha;
 			}
 		);
 		ops::Multiply(stored_activation, out_grad, stored_activation);
 		return stored_activation;
 
 	}
-	void build(const Tensor& input) override
-	{
 
-	}
 private:
 	Tensor stored_activation;
 	const T alpha;
@@ -110,10 +108,7 @@ public:
 		return stored_activation;
 
 	}
-	void build(const Tensor& input) override
-	{
 
-	}
 private:
 	Tensor stored_activation;
 	const T alpha;
@@ -146,7 +141,6 @@ public:
 				});
 	}
 
-	void build(const Tensor& input) override {};
 
 	Tensor backwards(const Tensor& out_grad, f64 lr) override
 	{
@@ -195,10 +189,7 @@ public:
 		return stored_activation;
 
 	}
-	void build(const Tensor& input) override
-	{
 
-	}
 private:
 	Tensor stored_activation;
 };
@@ -230,7 +221,6 @@ public:
 		return stored_activation;
 	}
 
-	void build(const Tensor& input) override {};
 
 private:
 	Tensor stored_activation;
@@ -251,6 +241,7 @@ public:
 
 	Tensor call(const Tensor& input, const bool training) override
 	{
+
 		T max = input.max();
 		Tensor exp = input.transform(
 			[&max = std::as_const(max)]
@@ -270,8 +261,6 @@ public:
 
 		return ops::Multiply(out_grad, grad::softmaxdx(stored_activation));
 	}
-
-	void build(const Tensor& input) override {};
 
 private:
 	const i32 axis;
@@ -304,8 +293,6 @@ public:
 		ops::Multiply(out_grad, df, df);
 		return df;
 	}
-	void build(const Tensor& input) override
-	{};
 
 
 private:

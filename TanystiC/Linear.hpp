@@ -54,11 +54,6 @@ public:
 		
 		Tensor dx = math::dot(out_grad , weights.T());
 
-		//size_t whc = stored_inputs.shape().prod() / stored_inputs.shape()[0];
-
-		//Tensor grad = out_grad.reshape(out_grad.shape().prod() / units, units);
-		//stored_inputs = stored_inputs.reshape(units,stored_inputs.shape().prod()/units );
-
 		smallvec<i32> axes = vec::tovec<i32>(range(out_grad.rank() - 1));
 
 		Tensor dw = math::tensordot(stored_inputs, out_grad, std::pair{ axes,axes });
@@ -74,7 +69,7 @@ public:
 		return dx;
 	}
 
-	void build(const Tensor& inputs) override
+	void build(const Tensor& inputs) 
 	{
 
 		weights = Matrix({ inputs.shape()[-1] , units });

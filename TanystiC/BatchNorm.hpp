@@ -11,8 +11,8 @@ class BatchNorm : public Layer<T>
 public:
 
 	BatchNorm(
-		const f64 momentum = .99,
-		const f64 eps = 1e-5,
+		const T momentum = .99,
+		const T eps = 1e-5,
 		const bool center = true,
 		const bool scale = true,
 		const std::string& beta_initializer = "zeros",
@@ -28,7 +28,7 @@ public:
 		moving_var_initializer(initializers::get<T>(moving_var_initializer))
 	{};
 
-Tensor call(const Tensor& inputs, const bool training) override
+	Tensor call(const Tensor& inputs, const bool training) override
 	{
 		if (!built)
 			build(inputs);
@@ -86,7 +86,7 @@ Tensor call(const Tensor& inputs, const bool training) override
 		}
 	}
 
-	void build(const Tensor& input) override
+	void build(const Tensor& input) 
 	{
 		size_t units = input.shape()[-1];
 
@@ -111,13 +111,13 @@ Tensor call(const Tensor& inputs, const bool training) override
 	{
 
 		Tensor dx_norm = scale ? ops::Multiply(out_grad, gamma) : out_grad;
-		f64 n = [&out_grad]() {
+		T n = [&out_grad]() {
 			f64 prod=1;
 			for (i32 i = 0; i < out_grad.rank() - 1; ++i)
 				prod *= out_grad.shape()[i];
 			return prod;
 		}();
-		f64 invn = 1. / n;
+		T invn = 1 / n;
 		std.apply([&invn](T x) {return invn / x; });
 		Tensor dx = ops::Multiply(
 			ops::Subtract(
@@ -147,7 +147,7 @@ private:
 		beta_initializer,
 		gamma_initializer, moving_mean_initializer,
 		moving_var_initializer;
-	const f64
+	const T
 		momentum, 
 		eps;
 	const bool center, scale;

@@ -27,8 +27,6 @@ public:
 		return callableLayer->backwards(out_grad, lr);
 	}
 
-	void build(const Tensor& input) override
-	{};
 
 private:
 	Layer<T>* callableLayer;

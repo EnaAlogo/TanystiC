@@ -87,7 +87,7 @@ public:
 	}
 
 
-	void build(const Tensor& inputs) override
+	void build(const Tensor& inputs) 
 	{
 		
 		weights = Matrix({ inputs.shape()[-1] , units });

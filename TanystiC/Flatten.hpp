@@ -40,9 +40,6 @@ public:
 	{
 		return out_grad.reshape(input_shape);
 	}
-	void build(const Tensor& inputs) override
-	{
-	};
 
 private:
 	smallvec<size_t> input_shape;

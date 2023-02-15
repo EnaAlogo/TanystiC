@@ -14,7 +14,6 @@ public:
 
 	virtual Tensor backwards(const Tensor& grad, f64 lr) = 0;
 
-	virtual void build(const Tensor& input) = 0;
 
 	Tensor operator()(const Tensor& input , bool training = 0)
 	{

@@ -88,7 +88,7 @@ public:
 
 		return dx;
 	}
-	void build(const Tensor& inputs) override
+	void build(const Tensor& inputs) 
 	{
 		if (inputs.rank() != 4)
 			std::cerr << "conv2d excepts 4d tensor", throw std::invalid_argument("");

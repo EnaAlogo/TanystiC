@@ -20,7 +20,6 @@ public:
 		return nn::max_pool2d(inputs, pool_size, strides);
 	}
 
-	void build(const Tensor& inputs) override {};
 
 	Tensor backwards(const Tensor& out_grad, f64 lr) override
 	{

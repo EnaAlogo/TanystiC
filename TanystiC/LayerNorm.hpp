@@ -9,8 +9,9 @@ class LayerNorm : public Layer<T>
 	using Tensor = Layer<T>::Tensor;
 	using Vector = Layer<T>::Vector;
 public:
-LayerNorm(
-		const f64 eps = 1e-5,
+
+	LayerNorm(
+		const T eps = 1e-5,
 		const bool center = true,
 		const bool scale = true,
 		const std::string& beta_initializer = "zeros",
@@ -22,7 +23,6 @@ LayerNorm(
 		gamma_initializer(initializers::get<T>(gamma_initializer))
 	{};
 
-	
 	Tensor call(const Tensor& inputs, const bool training) override
 	{
 		if (!built)
@@ -59,7 +59,7 @@ LayerNorm(
 
 	}
 
-	void build(const Tensor& input) override
+	void build(const Tensor& input) 
 	{
 		size_t units = input.shape()[-1];
 
@@ -78,14 +78,14 @@ LayerNorm(
 	Tensor backwards(const Tensor& out_grad, f64 lr)
 	{
 		Tensor dx_norm = scale ? ops::Multiply(out_grad, gamma) : out_grad;
-		f64 n = gamma.size();
+		T n = gamma.size();
 			/*[&out_grad]() {
 			f64 prod=1;
 			for (i32 i = 1; i < out_grad.rank() ; ++i)
 				prod *= out_grad.shape()[i];
 			return prod;
 		}(); */
-		f64 invn = 1. / n;
+		T invn = 1 / n;
 		std.apply([&invn](T x) {return invn / x; });
 		Tensor dx = ops::Multiply(
 			ops::Subtract(
@@ -113,7 +113,7 @@ private:
 	UniquePtr<initializer<T>>
 		beta_initializer,
 		gamma_initializer;
-	const f64 eps;
+	const T eps;
 	const bool center, scale;
 	bool built = false;
 };
