@@ -236,8 +236,8 @@ class Softmax : public Layer<T>
 public:
 	using value_type = T;
 
-	Softmax(const i32 axis = -1)
-		:axis(axis) {};
+	Softmax(const std::initializer_list<i32> axes = { -1 })
+		:axes(axes) {};
 
 	Tensor call(const Tensor& input, const bool training) override
 	{
@@ -248,7 +248,7 @@ public:
 		(T x) {return std::exp(x - max); });
 
 
-		ops::Divde(exp, reduce::sum(exp, { axis }, 1), exp);
+		ops::Divde(exp, reduce::sum(exp, axes, 1), exp);
 
 		if (training)
 			stored_activation = exp;
@@ -263,7 +263,7 @@ public:
 	}
 
 private:
-	const i32 axis;
+	const smallvec<i32> axes;
 	Tensor stored_activation;
 
 
