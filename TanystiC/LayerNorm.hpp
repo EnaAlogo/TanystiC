@@ -28,8 +28,7 @@ public:
 		if (!built)
 			build(inputs);
 
-		Tensor mean = reduce::mean(inputs, { -1 } , 1);
-		Tensor var = reduce::variance(inputs, { -1 } , 1);
+		auto [mean, var] = nn::moments(inputs, { -1 }, 1);
 		Tensor sigma = var.transform([this](T x) {return std::sqrt(x + eps); });
 		Tensor xcenter = ops::Subtract(inputs, mean);
 		Tensor xnorm = ops::Divde(xcenter, sigma);
@@ -94,10 +93,12 @@ public:
 			),
 			std );
 
+		smallvec<i32> rs = vec::tovec<i32>(out_grad.rank() -1);
+
 		if (scale)
-			nn::rm(gamma *= lr, reduce::sum(ops::Multiply(out_grad, x_norm), {0} ));
+			nn::rm(gamma *= lr, reduce::mean(ops::Multiply(out_grad, x_norm), rs));
 		if (center)
-			nn::rm(beta *= lr, reduce::sum(out_grad ,{0} ));
+			nn::rm(beta *= lr, reduce::mean(out_grad , rs));
 		return dx;
 
 	}

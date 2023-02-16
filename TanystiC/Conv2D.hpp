@@ -81,7 +81,7 @@ public:
 		nn::rm(kernel, dw);
 
 		if (use_bias){
-			grad = reduce::sum(grad, vec::tovec<i32>(range(grad.rank() - 1)));
+			grad = reduce::mean(grad, vec::tovec<i32>(range(grad.rank() - 1)));
 			grad *= lr;
 			nn::rm(bias, grad );
 		}

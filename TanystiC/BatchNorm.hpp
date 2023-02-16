@@ -34,8 +34,8 @@ public:
 			build(inputs);
 
 		if (training) {
-			Tensor in_mean = reduce::mean(inputs, { 0 });
-			Tensor in_var = reduce::variance(inputs, { 0 });
+			
+			auto [in_mean, in_var] = nn::moments(inputs, { 0 });
 
 			moving_mean *= momentum;
 			moving_var *= momentum;
@@ -126,10 +126,11 @@ public:
 			) , 
 			std );
 
+		smallvec<i32> rs = vec::tovec<i32>( out_grad.rank()-1 );
 		if (scale)
-			nn::rm(gamma *= lr, reduce::sum(ops::Multiply(out_grad, x_norm), { 0 }));
+			nn::rm(gamma *= lr, reduce::mean(ops::Multiply(out_grad, x_norm), rs));
 		if (center)
-			nn::rm(beta *=  lr, reduce::sum(out_grad , {0}));
+			nn::rm(beta *=  lr, reduce::mean(out_grad , rs));
 		return dx;
 	}
 
