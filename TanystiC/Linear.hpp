@@ -61,7 +61,7 @@ public:
 		nn::rm(weights, dw);
 
 		if (use_bias) {
-			Tensor db = reduce::sum(out_grad, { 0 });
+			Tensor db = reduce::sum(grad, axes);
 			db *= lr;
 			nn::rm(bias, db);
 		}
