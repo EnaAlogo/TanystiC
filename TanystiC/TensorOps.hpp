@@ -7,8 +7,6 @@
 #include "smallvec.hpp"
 
 
-
-
 namespace ops
 {
 	template<typename T , u32 N = 7 > 
@@ -139,32 +137,54 @@ namespace ops
 				item = op( a[ai], b[bi] );
 			}
 		}
+		template<typename T, u32 N>
+		void validate_axes(const Tensor<T, N>& a, const smallvec<i32,N>&axes)
+		{
+			if (axes.size() > a.rank())
+				std::cerr << "axes cannot be more than rank of tensor", throw std::invalid_argument("");
+			auto contains = [&a](const auto& arr)
+			{
+				for (i32 el : arr)
+					if (el > 1)
+						std::cerr << "duplicate axes not allowed", throw std::invalid_argument("");
+			};
+			std::array<i32, N> uniq = { 0 };
+			for (i32 i = 0; i < axes.size(); i++)
+			{
+				i32 ax = axes[i];
+				ax = ax >= 0 ? ax : ax + a.rank();
+				if (ax > a.rank())
+					std::cerr << "axis out of bounds", throw std::invalid_argument("");
+				uniq[ax] ++;
+			}
+			contains(uniq);
+		}
+		template<typename T , u32 N>
+		void validate_axes(const Tensor<T, N>& a, const std::initializer_list<i32>axes)
+		{
+			if (axes.size() > a.rank())
+				std::cerr << "axes cannot be more than rank of tensor", throw std::invalid_argument("");
+			auto contains = [&a](const auto& arr)
+			{
+				for (i32 el : arr)
+					if (el > 1)
+						std::cerr << "duplicate axes not allowed", throw std::invalid_argument("");
+			};
+			std::array<i32, N> uniq = { 0 };
+			for (i32 i = 0; i < axes.size(); i++)
+			{
+				i32 ax = *(axes.begin() + i);
+				ax = ax >= 0 ? ax : ax + a.rank();
+				if (ax > a.rank())
+					std::cerr << "axis out of bounds", throw std::invalid_argument("");
+				uniq[ax] ++;
+			}
+			contains(uniq);
+		}
 
 		template<typename T , u32 N>
 		auto validate_and_getReversed_view(const beta::Tensor<T, N>& tensor, const std::initializer_list<i32> axes)
 		{
-			auto validate_axes = [&tensor](const std::initializer_list<i32>axes)
-			{
-				if (axes.size() > tensor.rank())
-					std::cerr << "axes cannot be more than rank of tensor", throw std::invalid_argument("");
-				auto contains = [&tensor](const auto& arr)
-				{
-					for (i32 el : arr)
-						if (el > 1)
-							std::cerr << "duplicate axes not allowed", throw std::invalid_argument("");
-				};
-				std::array<i32, N> uniq = { 0 };
-				for (i32 i = 0; i < axes.size(); i++)
-				{
-					i32 ax = *(axes.begin() + i);
-					ax = ax >= 0 ? ax : ax + tensor.rank();
-					if (ax > tensor.rank())
-						std::cerr << "axis out of bounds", throw std::invalid_argument("");
-					uniq[ax] ++;
-				}
-				contains(uniq);
-
-			};
 			auto reverse = [](
 				const beta::Tensor<T, N>& conv,
 				const std::initializer_list<i32> axes)
@@ -217,7 +237,7 @@ namespace ops
 				return ret;
 			};
 
-			validate_axes(axes);
+			validate_axes(tensor , axes);
 
 			return reverse(tensor, axes);
 		};
