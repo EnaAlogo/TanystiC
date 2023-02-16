@@ -23,9 +23,11 @@ namespace nn
 			Tensor<T, N> variance({ 1 });
 			Tensor<T, N> mean_({ 1 });
 			T mean = a.mean();
-			Tensor<T, N> m = a - mean;
-			m.apply([](T item) {return item * item; });
-			T sum = reduce::sum(m);
+			T sum = 0;
+			for (const auto& item : a) {
+				T x = item - mean;
+				sum += x * x;
+			}
 			size_t n = a.size();
 			variance[0] = sum / n;
 			mean_[0] = mean;
