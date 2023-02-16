@@ -13,13 +13,39 @@ namespace nn
 	using Vector = beta::Tensor<T, 1>;
 	template<typename T >
 	using Matrix = beta::Tensor<T, 2>;
-#if 0 
-	template<typename T , u32 N>
-	std::pair<Tensor<T, N>, Tensor<T, N>> moments(const Tensor<T, N>& x)
-	{
 
+    template<typename T , u32 N>
+	std::pair<Tensor<T, N>, Tensor<T, N>> moments(const Tensor<T, N>& a,
+		const smallvec<i32,N>& axes , const bool keepdims =0)
+	{
+		if (axes.size() == a.rank()) {
+			ops::_internal::validate_axes(a, axes);
+			Tensor<T, N> variance({ 1 });
+			Tensor<T, N> mean_({ 1 });
+			T mean = a.mean();
+			Tensor<T, N> m = a - mean;
+			m.apply([](T item) {return item * item; });
+			T sum = reduce::sum(m);
+			size_t n = a.size();
+			variance[0] = sum / n;
+			mean_[0] = mean;
+			return {  mean_ , variance };
+		}
+		T prod = 1;
+		for (auto i : axes) {
+			prod *= a.shape()[i];
+		};
+
+		Tensor<T, N> mean = reduce::mean(a, axes, 1);
+		Tensor<T, N> variance = ops::Subtract(a, mean);
+		variance.apply([](T item) {return item * item; });
+		variance = reduce::sum(variance, axes, keepdims);
+
+		variance /= prod;
+
+		return { mean , variance };
 	};
-#endif
+	
 	template<typename T , u32 N>
 	Tensor<T>& bias_add(Tensor<T , N>& output, const Vector<T>& biases)
 	{

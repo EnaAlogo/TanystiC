@@ -6,8 +6,6 @@
 #include "TensorIterators.hpp"
 
 
-
-
 namespace cum {
 
 	template<typename T, u32 N>
@@ -175,31 +173,7 @@ namespace reduce {
 		}
 		return out;
 	}
-	template<typename T, u32 N>
-	beta::Tensor<T, N> sum(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes,
-		const bool keepdims = 0 )
-	{
-		if (axes.size() == a.rank()) {
-			ops::_internal::validate_axes(a, axes);
-			Tensor<T, N> ret({ 1 });
-			ret[0] = sum(a);
-			return ret;
-		}
-		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)0);
 
-		for (auto [index, item] : tEnumerate(tmp))
-		{
-			size_t i = vec::compute_flat_index(strides, tmp.shape(), index);
-			out[i] += item;
-		}
-		if (keepdims) {
-			smallvec<size_t, N> keepdims = a.shape();
-			for (auto i : axes) 
-				keepdims[i] = 1;
-			out = out.reshape(keepdims);
-		}
-		return out;
-	}
 	
 	template<typename T, u32 N>
 	T multiply(const beta::Tensor<T, N>& a)
@@ -246,8 +220,8 @@ namespace reduce {
 		return total;
 	}
 	template<typename T, u32 N>
-	beta::Tensor<T, N> mean(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes,
-		const bool keepdims =0 )
+	beta::Tensor<T, N> mean(const beta::Tensor<T, N>& a, const smallvec<i32>& axes,
+		const bool keepdims = 0)
 	{
 		if (axes.size() == a.rank()) {
 			ops::_internal::validate_axes(a, axes);
@@ -256,9 +230,8 @@ namespace reduce {
 			return ret;
 		}
 		// Compute the sum of the elements along the specified axis
-		auto total = sum(a, axes , keepdims);
+		auto total = sum(a, axes, keepdims);
 
-		//TODO mean sht
 		// Compute the size of the reduction dimension
 		T prod = 1;
 		for (auto i : axes)
@@ -268,6 +241,7 @@ namespace reduce {
 		total /= prod;
 		return total;
 	}
+
 	
 	template<typename T, u32 N>
 	T variance(const Tensor<T, N>& a)
@@ -280,7 +254,7 @@ namespace reduce {
 		return sum_ / n;
 	};
 	template<typename T, u32 N>
-	Tensor<T, N> variance(const Tensor<T, N>& a, std::initializer_list<i32> axes,
+	Tensor<T, N> variance(const Tensor<T, N>& a, const std::initializer_list<i32> axes,
 		const bool keepdims=0)
 	{
 		if (axes.size() == a.rank()) {
@@ -301,7 +275,7 @@ namespace reduce {
 
 		x.apply([](T item) {return item * item; });
 
-		Tensor<T, N> ret = sum(x, axes , keepdims);
+		Tensor<T, N> ret = sum(x, { axes }, keepdims);
 
 		ret /= prod;
 
@@ -369,5 +343,8 @@ namespace reduce {
 	}
 
 	
+
+ 
+
 
 };
