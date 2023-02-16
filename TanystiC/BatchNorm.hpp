@@ -112,7 +112,7 @@ public:
 
 		Tensor dx_norm = scale ? ops::Multiply(out_grad, gamma) : out_grad;
 		T n = [&out_grad]() {
-			f64 prod=1;
+			T prod=1;
 			for (i32 i = 0; i < out_grad.rank() - 1; ++i)
 				prod *= out_grad.shape()[i];
 			return prod;
