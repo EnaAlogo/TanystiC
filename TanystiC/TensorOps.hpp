@@ -18,6 +18,33 @@ namespace ops
 	template<typename T>
 	using Vector = Tensor<T, 1>;
 
+	template<typename T, u32 N, u32 M>
+	beta::Tensor<T, M > broadcast_to(const beta::Tensor<T, N>& a, const smallvec<size_t, M>& shape)
+	{
+		if (!(shape.size() >= a.rank()))
+			std::cerr << "shape " << a.shape() << " cannot be broadcasted to " << shape
+			, throw std::invalid_argument("");
+		smallvec<size_t, M > bcastable_shape;
+		for (i32 i = 0; i < shape.size() - a.rank(); i++)
+			bcastable_shape.append(1);
+		for (const size_t i : a.shape())
+			bcastable_shape.append(i);
+
+		smallvec<size_t, M> rstrides = vec::compute_strides(bcastable_shape,
+			a.strides()[-1]);
+
+		for (int i = 0; i < shape.size(); i++) {
+			if (bcastable_shape[i] != shape[i] && bcastable_shape[i] == 1)
+				rstrides[i] = 0;
+			else if (bcastable_shape[i] != shape[i])
+				std::cerr << "shape " << a.shape() << " cannot be broadcasted to " << shape
+				, throw std::invalid_argument("");
+			bcastable_shape[i] = shape[i];
+		}
+		return beta::Tensor<T, M>(bcastable_shape, rstrides, a.offset(), a.data());
+	}
+
+
 	namespace _internal
 	{
 		template<u32 N , u32 M>
@@ -32,9 +59,9 @@ namespace ops
 			return true;
 		}
 		template<u32 N, u32 N1>
-		smallvec<size_t> find_broadcast_shape(const smallvec<size_t, N >& right, const smallvec<size_t, N1>& left)
+		smallvec<size_t, N* (N > N1) + N1 * (N <= N1)> find_broadcast_shape(const smallvec<size_t, N >& right, const smallvec<size_t, N1>& left)
 		{
-			smallvec<size_t> result(std::max(right.size() , left.size()));
+			smallvec<size_t, N* (N > N1) + N1 * (N <= N1)> result(std::max(right.size() , left.size()));
 			auto first_part = [&](const auto& big, const auto& small) ->void
 			{
 				for (i32 i = 1; i <= small.size() ; ++i)
@@ -78,65 +105,7 @@ namespace ops
 			return strides;
 		}
 
-		template<typename T, u32 N, u32 M>
-		beta::Tensor<T> bin_operation(const beta::Tensor<T, N>& a, const beta::Tensor<T, M>& b
-			, const operation<T>& op)
-		{
-			beta::Tensor<T> C(find_broadcast_shape(a.shape(), b.shape()));
-			smallvec<size_t> a_strides = bcast_strides(a, C.shape());
-			smallvec<size_t> b_strides = bcast_strides(b, C.shape());
-			auto indices = [](const auto& a, const auto& b, const auto& i)
-			{
-				size_t ai = 0, bi = 0;
-				for (auto [f, s, ii] : zip(a, b, i)) {
-					//int index = i >= 0 ? i : l + i;
-					//assert(index < l && "subscript out of range");
-					ai += f * ii;
-					bi += s * ii;
-				}
-				return std::make_pair(ai, bi);
-			};
 	
-			for (auto [indices_ , item] : tEnumerate(C))
-			{
-				auto [b_index, a_index] = indices(b_strides, a_strides, indices_);
-				item = op(a[a_index], b[b_index]);
-			};
-			return C;
-		}
-		
-		template<typename T, u32 N, u32 M , u32 K>
-		void bin_operation(
-			const beta::Tensor<T, N>& a,
-			const beta::Tensor<T, M>& b,
-            const operation<T>& op,
-			beta::Tensor<T, K>& out)
-		{
-			assert(is_broadcastable(a.shape(), out.shape()) && is_broadcastable(b.shape(), out.shape())
-				&& "invalid out param");
-			auto indices = [](const auto& a, const auto& b, const auto& i)
-			{
-				size_t ai = 0, bi = 0;
-				for (auto [f, s, ii] : zip(a, b, i)) {
-					//int index = i >= 0 ? i : l + i;
-					//assert(index < l && "subscript out of range");
-					ai += f * ii;
-					bi += s * ii;
-				}
-				return std::make_pair(ai, bi);
-			};
-			
-			auto a_strides = bcast_strides(a, out.shape());
-			auto b_strides = bcast_strides(b, out.shape());
-
-			for (auto [i, item] : tEnumerate(out))
-			{
-				
-				auto [ai, bi] = indices(a_strides, b_strides ,i);
-
-				item = op( a[ai], b[bi] );
-			}
-		}
 		template<typename T, u32 N>
 		void validate_axes(const Tensor<T, N>& a, const smallvec<i32,N>&axes)
 		{
@@ -242,28 +211,93 @@ namespace ops
 			return reverse(tensor, axes);
 		};
 
+		template<u32 N>
+		decltype(auto) _element_wise_offsets
+		(const smallvec<size_t, N>& a, const smallvec < size_t, N>& b,
+			const smallvec < size_t, N>& c, const smallvec < size_t, N>& i)
+		{
+			//assert(a.size() == b.size() && c.size() == b.size() && a.size() == i.size());
+			size_t ai = 0, bi = 0, ci = 0;
+			for (size_t k = 0; k < a.size(); ++k)
+			{
+				ai += a[k] * i[k];
+				bi += b[k] * i[k];
+				ci += c[k] * i[k];
+			}
+			struct { size_t x, y, z; }ret{ ai,bi,ci };
+			return ret;
+		};
+
+		template<typename T, u32 N, typename Operation>
+		void _element_wise(const Tensor<T, N>& a, const Tensor<T, N>& b, Tensor<T, N>& c,
+			const Operation& op, smallvec<size_t, N>& indices, i32 level = 0)
+		{
+			if (level == a.rank() - 1)
+			{
+				for (size_t i = 0; i < a.shape().back(); ++i)
+				{
+					indices[level] = i;
+					auto [ai, bi, ci] = _element_wise_offsets(a.strides(), b.strides(), c.strides(), indices);
+					c[ci] = op(a[ai], b[bi]);
+				}
+				indices[level] = 0;
+				return;
+			}
+			for (size_t i = 0; i < a.shape()[level]; ++i) {
+				indices[level] = i;
+				_element_wise(a, b, c, op, indices, level + 1);
+			}
+			indices[level] = 0;
+		}
+		
+		template<typename T, u32 N, u32 M, u32 K, typename Operation>
+		void binary_operation(
+			const Tensor<T, N>& a,
+			const Tensor < T, M>& b,
+			Tensor<T, K>& c,
+			const Operation& op)
+		{
+
+			Tensor<T, K> aa = ops::broadcast_to(a, c.shape());
+			Tensor<T, K> bb = ops::broadcast_to(b, c.shape());
+			smallvec<size_t, K> indices(c.rank());
+			_element_wise(aa, bb, c, op, indices);
+		}
+
+		template<typename T, u32 N, u32 M, typename Operation>
+		decltype(auto) binary_operation(
+			const Tensor<T, N>& a,
+			const Tensor < T, M>& b,
+			const Operation& op)
+		{
+			using tensor_t = std::conditional< (N > M), Tensor<T, N>, Tensor<T, M> >::type;
+
+			tensor_t c(ops::_internal::find_broadcast_shape(a.shape(), b.shape()));
+			binary_operation(a, b, c, op);
+			return c;
+		}
 
 	};//end internal
 
 	template<typename T, u32 N ,u32 M >
 	beta::Tensor<T> Add(const beta::Tensor<T, N>& a, const beta::Tensor<T, M>& b)
 	{
-		return _internal::bin_operation(a, b, _add<T>{});
+		return _internal::binary_operation(a, b, _add<T>{});
 	}
 	template<typename T, u32 N, u32 M >
 	beta::Tensor<T> Subtract(const beta::Tensor<T, N>& a, const beta::Tensor<T, M>& b)
 	{
-		return _internal::bin_operation(a, b, _sub<T>{});
+		return _internal::binary_operation(a, b, _sub<T>{});
 	}
 	template<typename T, u32 N, u32 M >
 	beta::Tensor<T> Multiply(const beta::Tensor<T, N>& a, const beta::Tensor<T, M>& b)
 	{
-		return _internal::bin_operation(a, b, _mul<T>{});
+		return _internal::binary_operation(a, b, _mul<T>{});
 	}
 	template<typename T, u32 N, u32 M >
 	beta::Tensor<T> Divde(const beta::Tensor<T, N>& a, const beta::Tensor<T, M>& b)
 	{
-		return _internal::bin_operation(a, b, _div<T>{});
+		return _internal::binary_operation(a, b, _div<T>{});
 	}
 	template<typename T, u32 N, u32 M ,u32 K>
 	void Add(
@@ -271,7 +305,7 @@ namespace ops
 		const beta::Tensor<T, M>& b,
 		beta::Tensor<T,K>& out)
 	{
-		   _internal::bin_operation(a, b, _add<T>{} , out);
+		   _internal::binary_operation(a, b, out, _add<T>{} );
 	}
 	template<typename T, u32 N, u32 M ,u32 K>
 	void Subtract(
@@ -279,7 +313,7 @@ namespace ops
 		const beta::Tensor<T, M>& b,
 		beta::Tensor<T, K>& out)
 	{
-			_internal::bin_operation(a, b, _sub<T>{}, out);
+			_internal::binary_operation(a, b, out,_sub<T>{});
 	}
 	template<typename T, u32 N, u32 M , u32 K >
 	void Multiply(
@@ -287,7 +321,7 @@ namespace ops
 		const beta::Tensor<T, M>& b,
 		beta::Tensor<T, K>& out)
 	{
-			_internal::bin_operation(a, b, _mul<T>{}, out);
+			_internal::binary_operation(a, b, out, _mul<T>{});
 			
 	}
 	template<typename T, u32 N, u32 M ,u32 K>
@@ -296,7 +330,7 @@ namespace ops
 		const beta::Tensor<T, M>& b,
 		beta::Tensor<T, K>& out)
     {
-			_internal::bin_operation(a, b, _div<T>{}, out);
+			_internal::binary_operation(a, b,  out , _div<T>{} );
 	}
 
 	template<typename value_type, u32 N  >
@@ -370,29 +404,7 @@ namespace ops
 
 		return beta::Tensor<value_type, N>(shape, strides, tensor.offset(), tensor.data());
 	}
-	template<typename T , u32 N , u32 M>
-	beta::Tensor<T, M > broadcast_to(const beta::Tensor<T, N>& a, const smallvec<size_t, M>& shape)
-	{
-		assert(shape.size() >= a.rank());
-		smallvec<size_t, M > bcastable_shape;
-		for (i32 i = 0; i < shape.size() - a.rank(); i++)
-			bcastable_shape.append(1);
-		for (const size_t i : a.shape())
-			bcastable_shape.append(i);
-
-		smallvec<size_t,M> rstrides = vec::compute_strides(bcastable_shape,
-			a.strides()[-1]);
-
-		for (int i = 0; i < shape.size() ; i++) {
-			if (bcastable_shape[i] != shape[i] && bcastable_shape[i] == 1)
-				rstrides[i] = 0;
-			else if (bcastable_shape[i] != shape[i])
-				throw std::invalid_argument("shapes cannot be broadcasted");
-			bcastable_shape[i] = shape[i];
-		}
-		return beta::Tensor<T,M>(bcastable_shape , rstrides, a.offset() , a.data());
-	}
-
+	
 
 	template<typename T, u32 N>
 	Matrix<T> matrix_diag(const beta::Tensor<T, N>& a, i32 k = 0)

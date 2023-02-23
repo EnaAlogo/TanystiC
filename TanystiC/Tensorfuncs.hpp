@@ -68,12 +68,12 @@ namespace reduce {
 	template<typename T>
 	using Vector = beta::Tensor<T, 1>;
 
+	namespace _internal{
 
-	namespace _internal {
-		template<typename T, u32 N>
-		std::tuple<beta::Tensor<T, N>, beta::Tensor<T, N>, smallvec<size_t, N>>
-			set_up_reduction(
-				const beta::Tensor<T, N>& a,
+		template<typename T, u32 N >
+		std::tuple<Tensor<T, N>, Tensor<T, N>, Tensor<T, N>>
+		_reduce(
+				const Tensor<T, N>& a,
 				const smallvec<i32,N>& axes,
 				const T initial_value
 			)
@@ -91,54 +91,60 @@ namespace reduce {
 				new_str.append(a.strides()[i]);
 			}
 			for (i32 i = 0; i < a.rank(); i++)
-				if (!axes_.contains(i)) {
+				if ( std::find(axes_.begin() , axes_.end() , i) == axes_.end() ) {
 					new_shape.append(a.shape()[i]);
 					new_str.append(a.strides()[i]);
 				}
 
-			beta::Tensor<T, N> result(vec::slice(new_shape, axes.size(), a.rank()));
-			for (auto& item : result)
+			Tensor<T, N> result(vec::slice(new_shape, axes.size(), a.rank()));
+			if(initial_value)
+			  for (auto& item : result)
 				item = initial_value;
 
-			auto strides = ops::_internal::bcast_strides(result, new_shape);
-			return { beta::Tensor<T,N>(new_shape , new_str,
-									   a.offset() , a.data())  ,result , strides };
+			Tensor<T, N>projection(new_shape,
+					ops::_internal::bcast_strides(result, new_shape)
+					, result.offset(), result.data());
+			
+			return std::make_tuple(Tensor<T, N>(new_shape, new_str,
+				a.offset(), a.data()), projection, result);
 		}
-		template<typename T, u32 N>
-		std::tuple<beta::Tensor<T, N>, beta::Tensor<T, N>, smallvec<size_t, N>>
-			set_up_reduction(
-				const beta::Tensor<T, N>& a,
-				std::initializer_list<i32> axes,
-				const T initial_value
-			)
+
+		
+
+		template<typename T, u32 N, typename Operation>
+		Tensor<T, N> _generic_reduction(
+			const Tensor<T, N>& A,
+			const smallvec<i32,N> axes,
+			const Operation& op,
+			const bool keepdims = 0 ,
+			const T initial_value = 0 //optional param only rly useful for reduce multiply
+		)
 		{
-			ops::_internal::validate_axes(a, axes);
-			assert(axes.size() <= a.rank());
-			smallvec<size_t, N>new_shape;
-			smallvec<size_t, N> new_str;
-			smallvec<i32, N> axes_;
-			for (i32 i : axes)
-				axes_.append(i >= 0 ? i : i + a.rank());
-
-			for (i32 i : axes) {
-				new_shape.append(a.shape()[i]);
-				new_str.append(a.strides()[i]);
-			}
-			for (i32 i = 0; i < a.rank(); i++)
-				if (!axes_.contains(i)) {
-					new_shape.append(a.shape()[i]);
-					new_str.append(a.strides()[i]);
+			auto[permuted,projection,result] = [&A, &axes, &initial_value] {
+				if (axes.size() == A.rank())
+				{
+					Tensor<T, N> result({ 1 });
+					result[0] = initial_value;
+					return std::make_tuple(A, ops::broadcast_to(result, A.shape()), result);
 				}
+				return _reduce(A, axes, initial_value);
+			} ();
+			 
+			smallvec<size_t, N> indices(A.rank());
+			ops::_internal::_element_wise(permuted, projection, projection, op, indices);
 
-			beta::Tensor<T, N> result(vec::slice(new_shape, axes.size(), a.rank()));
-			for (auto& item : result)
-				item = initial_value;
+			if (keepdims) {
+				smallvec<size_t, N> keepdims = A.shape();
+				for (auto i : axes)
+					keepdims[i] = 1;
+				result = result.reshape(keepdims);
+			}
 
-			auto strides = ops::_internal::bcast_strides(result, new_shape);
-			return { beta::Tensor<T,N>(new_shape , new_str,
-									   a.offset() , a.data())  ,result , strides };
+			return result;
 		}
+
 	};
+
 	template<typename T, u32 N>
 	T sum(const beta::Tensor<T, N>& a)
 	{
@@ -147,31 +153,13 @@ namespace reduce {
 			s += item;
 		return s;
 	}
-
+	
+	
 	template<typename T , u32 N>
 	Tensor<T, N> sum(const Tensor<T, N>& a, const smallvec<i32, N>& axes,
 		const bool keepdims = 0)
 	{
-		if (axes.size() == a.rank()) {
-			ops::_internal::validate_axes(a, axes);
-			Tensor<T, N> ret({ 1 });
-			ret[0] = sum(a);
-			return ret;
-		}
-		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)0);
-
-		for (auto [index, item] : tEnumerate(tmp))
-		{
-			size_t i = vec::compute_flat_index(strides, tmp.shape(), index);
-			out[i] += item;
-		}
-		if (keepdims) {
-			smallvec<size_t, N> keepdims = a.shape();
-			for (auto i : axes)
-				keepdims[i] = 1;
-			out = out.reshape(keepdims);
-		}
-		return out;
+		return _internal::_generic_reduction(a, axes, std::plus{}, keepdims);
 	}
 
 	
@@ -188,25 +176,7 @@ namespace reduce {
 	beta::Tensor<T, N> multiply(const beta::Tensor<T, N>& a, std::initializer_list<i32> axes,
 		const bool keepdims = 0)
 	{
-		if (axes.size() == a.rank()) {
-			ops::_internal::validate_axes(a, axes);
-			Tensor<T, N> ret({ 1 });
-			ret[0] = multiply(a);
-			return ret;
-		}
-		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)1);
-		for (auto [index, item] : tEnumerate(tmp))
-		{
-			size_t i = vec::compute_flat_index(strides, tmp.shape(), index);
-			out[i] *= item;
-		}
-		if (keepdims) {
-			smallvec<size_t, N> keepdims = a.shape();
-			for (auto i : axes)
-				keepdims[i] = 1;
-			out = out.reshape(keepdims);
-		}
-		return out;
+		return _internal::_generic_reduction(a, axes, std::multiplies{}, keepdims , 1);
 	}
 	
 	template<typename T, u32 N>
@@ -291,6 +261,7 @@ namespace reduce {
 		T var = variance(a);
 		return std::sqrt(var);
 	};
+
 	template<typename T, u32 N>
 	Tensor<T, N> stddev(const Tensor<T, N>& a, std::initializer_list<i32> axes,
 		const bool keepdims = 0)
@@ -313,37 +284,17 @@ namespace reduce {
 		for (const auto& item : a)
 			norm_ += item * item;
 		return std::sqrt(norm_);
+
 	}
 
 	template<typename T, u32 N>
-	Tensor<T, N> norm(const Tensor<T, N>& a, std::initializer_list<i32> axes,
+	Tensor<T, N> norm(const Tensor<T, N>& a, const smallvec<i32,N>& axes,
 		const bool keepdims =0)
 	{
-		if (axes.size() == a.rank()) {
-			ops::_internal::validate_axes(a, axes);
-			Tensor<T, N> ret({ 1 });
-			ret[0] = norm(a);
-			return ret;
-		}
-		auto [tmp, out, strides] = _internal::set_up_reduction(a, axes, (T)0);
-
-		for (auto [index, item] : tEnumerate(tmp))
-		{
-			size_t i = vec::compute_flat_index(strides, tmp.shape(), index);
-			out[i] += item*item;
-		}
-		out.apply([](T item) {return std::sqrt(item); });
-		if (keepdims) {
-			smallvec<size_t, N> keepdims = a.shape();
-			for (auto i : axes)
-				keepdims[i] = 1;
-			out = out.reshape(keepdims);
-		}
-		return out;
+		return reduce::_internal::_generic_reduction(a, axes,
+			[](T a, T b) {return b + (a * a); }, keepdims)
+			.apply([](f32 x) {return std::sqrt(x); });
 	}
-
-	
-
  
 
 
