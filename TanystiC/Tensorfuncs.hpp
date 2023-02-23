@@ -293,7 +293,7 @@ namespace reduce {
 	{
 		return reduce::_internal::_generic_reduction(a, axes,
 			[](T a, T b) {return b + (a * a); }, keepdims)
-			.apply([](f32 x) {return std::sqrt(x); });
+			.apply([](T x) {return std::sqrt(x); });
 	}
  
 
